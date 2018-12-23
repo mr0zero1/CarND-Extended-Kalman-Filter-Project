@@ -5,7 +5,14 @@
 #include "FusionEKF.h"
 #include "tools.h"
 
+#include "measurement_package.h"
+
+
+
 using namespace std;
+using std::vector;
+using Eigen::MatrixXd;
+using Eigen::VectorXd;
 
 // for convenience
 using json = nlohmann::json;
@@ -26,7 +33,7 @@ std::string hasData(std::string s) {
   return "";
 }
 
-int main()
+int Main()
 {
   uWS::Hub h;
 
@@ -77,7 +84,6 @@ int main()
           		iss >> timestamp;
           		meas_package.timestamp_ = timestamp;
           } else if (sensor_type.compare("R") == 0) {
-
       	  		meas_package.sensor_type_ = MeasurementPackage::RADAR;
           		meas_package.raw_measurements_ = VectorXd(3);
           		float ro;
@@ -90,6 +96,9 @@ int main()
           		iss >> timestamp;
           		meas_package.timestamp_ = timestamp;
           }
+          //Call ProcessMeasurment(meas_package) for Kalman filter
+    	  fusionEKF.ProcessMeasurement(meas_package);             
+          
           float x_gt;
     	  float y_gt;
     	  float vx_gt;
@@ -105,11 +114,7 @@ int main()
     	  gt_values(3) = vy_gt;
     	  ground_truth.push_back(gt_values);
           
-          //Call ProcessMeasurment(meas_package) for Kalman filter
-    	  fusionEKF.ProcessMeasurement(meas_package);    	  
-
     	  //Push the current estimated x,y positon from the Kalman filter's state vector
-
     	  VectorXd estimate(4);
 
     	  double p_x = fusionEKF.ekf_.x_(0);
@@ -182,4 +187,107 @@ int main()
     return -1;
   }
   h.run();
+  return 0;
+}
+
+int TestMain() 
+{
+   // Create a Kalman Filter instance
+  	FusionEKF fusionEKF;
+	 
+  	// used to compute the RMSE later
+  	Tools tools;
+  	vector<VectorXd> estimations;
+  	vector<VectorXd> ground_truth;
+	
+    string infilename = "../data/obj_pose-laser-radar-synthetic-input.txt";
+	ifstream in_file(infilename.c_str(), std::ifstream::in);
+    if (!in_file.is_open()) {
+      cout << "*E, Error: Cannot open file: " << infilename << endl;
+    }
+  
+  	string line;
+  	int i = 0;
+    
+  	while ( getline(in_file, line) && (i<500) ) { 
+      i++;
+    
+      istringstream iss(line);
+      long long timestamp;
+      string sensor_type;
+      iss >> sensor_type;
+      MeasurementPackage meas_package;
+      if (sensor_type.compare("L") == 0) {
+       // meas_package = LaserMeasurement(iss);
+        meas_package.sensor_type_ = MeasurementPackage::LASER;
+        meas_package.raw_measurements_ = VectorXd(2);
+        float px;
+        float py;
+        iss >> px;
+        iss >> py;
+        meas_package.raw_measurements_ << px, py;
+        iss >> timestamp;
+        meas_package.timestamp_ = timestamp;
+      } else if (sensor_type.compare("R") == 0) {
+        meas_package.sensor_type_ = MeasurementPackage::RADAR;
+        meas_package.raw_measurements_ = VectorXd(3);
+        float ro, theta, ro_dot;
+        iss >> ro;
+        iss >> theta;
+        iss >> ro_dot;
+        meas_package.raw_measurements_ << ro, theta, ro_dot;
+        iss >> timestamp;
+        meas_package.timestamp_ = timestamp;
+      }
+
+      float x_gt, y_gt, vx_gt, vy_gt;
+      iss >> x_gt;
+      iss >> y_gt;
+      iss >> vx_gt;
+      iss >> vy_gt;
+      
+      VectorXd gt_values(4);
+      gt_values(0) = x_gt;
+      gt_values(1) = y_gt;
+      gt_values(2) = vx_gt;
+      gt_values(3) = vy_gt;
+      ground_truth.push_back(gt_values);
+	
+      fusionEKF.ProcessMeasurement(meas_package);
+      
+
+      VectorXd estimate(4);
+   
+      double p_x = fusionEKF.ekf_.x_(0);
+      double p_y = fusionEKF.ekf_.x_(1);
+      double v1  = fusionEKF.ekf_.x_(2);
+      double v2  = fusionEKF.ekf_.x_(3);
+
+      estimate(0) = p_x;
+      estimate(1) = p_y;
+      estimate(2) = v1;
+      estimate(3) = v2;
+
+      estimations.push_back(estimate);
+
+
+      // calulate ... 
+     //cout << line << endl;
+
+    }
+	 VectorXd RMSE = tools.CalculateRMSE(estimations, ground_truth);
+	 cout << "RMSE:" <<  RMSE << endl;	 
+  return 0;
+
+}
+
+// Uncomment this to test EKF with only commandline
+//#define ENV_TEST
+int main()
+{
+  #ifdef ENV_TEST
+    return TestMain();
+  #else
+  	return Main();
+  #endif
 }

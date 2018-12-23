@@ -1,6 +1,7 @@
 #ifndef KALMAN_FILTER_H_
 #define KALMAN_FILTER_H_
 #include "Eigen/Dense"
+#include "tools.h"
 
 class KalmanFilter {
 public:
@@ -22,6 +23,8 @@ public:
 
   // measurement covariance matrix
   Eigen::MatrixXd R_;
+  
+  Tools tools;
 
   /**
    * Constructor
@@ -63,6 +66,9 @@ public:
    * @param z The measurement at k+1
    */
   void UpdateEKF(const Eigen::VectorXd &z);
+  
+  VectorXd h(const VectorXd &x_state);
+  float adjust_between_pi(float angle);
 
 };
 
